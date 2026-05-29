@@ -4,9 +4,10 @@ const state = {
     currentNovelId: null,
     currentNovel: null,
     chapters: [],
+    characters: [],
     currentChapterId: null,
     currentChapter: null,
-    viewMode: 'write', // write | preview | storyboard
+    viewMode: 'write', // write | preview | storyboard | characters
     sidebarCollapsed: false,
     saveTimer: null,
     aiAction: null,
@@ -41,6 +42,8 @@ const dom = {
     sidebar: $('#sidebar'),
     sbList: $('#sb-list'),
     sbShotCount: $('#sb-shot-count'),
+    charactersContainer: $('#characters-container'),
+    charGrid: $('#char-grid'),
 };
 
 // ===== Init =====
@@ -69,6 +72,10 @@ function bindEvents() {
     $('#btn-view-write').onclick = () => setViewMode('write');
     $('#btn-view-preview').onclick = () => setViewMode('preview');
     $('#btn-view-storyboard').onclick = () => setViewMode('storyboard');
+    $('#btn-view-characters').onclick = () => setViewMode('characters');
+
+    // Add character
+    $('#btn-add-character').onclick = () => showCharacterForm();
 
     // Save snapshot
     $('#btn-save-snapshot').onclick = () => saveSnapshot();
@@ -105,6 +112,7 @@ function bindEvents() {
             const action = btn.dataset.action;
             if (action === 'dialogue') {
                 dom.aiDialogueOptions.style.display = 'block';
+                populateCharSelect();
             } else {
                 dom.aiDialogueOptions.style.display = 'none';
             }
@@ -159,6 +167,7 @@ async function selectNovel(id) {
     dom.chapterSection.style.display = 'block';
     dom.topbarNovelInfo.textContent = `《${state.currentNovel.title}》`;
     await loadChapters();
+    await loadCharacters();
     renderNovelList();
 }
 
@@ -329,18 +338,26 @@ function updateWordCount() {
 
 function setViewMode(mode) {
     state.viewMode = mode;
-    dom.editorTextarea.style.display = mode === 'write' ? 'block' : 'none';
-    dom.previewPane.classList.toggle('active', mode === 'preview');
-    dom.storyboardContainer.style.display = mode === 'storyboard' ? 'flex' : 'none';
-    dom.editorContainer.style.display = mode === 'storyboard' ? 'none' : 'flex';
+    const isWrite = mode === 'write';
+    const isPreview = mode === 'preview';
+    const isStoryboard = mode === 'storyboard';
+    const isCharacters = mode === 'characters';
+
+    dom.editorTextarea.style.display = isWrite ? 'block' : 'none';
+    dom.previewPane.classList.toggle('active', isPreview);
+    dom.storyboardContainer.style.display = isStoryboard ? 'flex' : 'none';
+    dom.charactersContainer.style.display = isCharacters ? 'flex' : 'none';
+    dom.editorContainer.style.display = (isStoryboard || isCharacters) ? 'none' : 'flex';
 
     $$('#editor-footer .btn').forEach(b => b.classList.remove('active'));
-    if (mode === 'write') $('#btn-view-write').classList.add('active');
-    if (mode === 'preview') $('#btn-view-preview').classList.add('active');
-    if (mode === 'storyboard') $('#btn-view-storyboard').classList.add('active');
+    if (isWrite) $('#btn-view-write').classList.add('active');
+    if (isPreview) $('#btn-view-preview').classList.add('active');
+    if (isStoryboard) $('#btn-view-storyboard').classList.add('active');
+    if (isCharacters) $('#btn-view-characters').classList.add('active');
 
-    if (mode === 'preview') renderPreview();
-    if (mode === 'storyboard') loadStoryboards();
+    if (isPreview) renderPreview();
+    if (isStoryboard) loadStoryboards();
+    if (isCharacters) loadCharacters();
 }
 
 function renderPreview() {
@@ -416,7 +433,7 @@ function triggerAI(action) {
         current_text: textarea.value,
         selected_text: textarea.value.substring(textarea.selectionStart, textarea.selectionEnd),
         style_guide: styleGuide,
-        character_name: dom.aiCharName.value.trim(),
+        character_name: $('#ai-char-name').value || $('#ai-char-name-custom').value.trim(),
         length: 'paragraphs',
     }, (token) => {
         state.aiStreamText += token;
@@ -459,4 +476,12 @@ function discardAI() {
     state.aiAction = null;
     dom.aiOutput.innerHTML = '<div class="ai-placeholder">点击上方按钮开始使用 AI 辅助写作</div>';
     dom.aiOutputActions.style.display = 'none';
+}
+
+function populateCharSelect() {
+    const sel = $('#ai-char-name');
+    sel.innerHTML = '<option value="">选择角色或手动输入</option>';
+    (state.characters || []).forEach(c => {
+        sel.innerHTML += `<option value="${escapeHtml(c.name)}">${escapeHtml(c.name)}（${ROLE_LABELS[c.role] || c.role}）</option>`;
+    });
 }

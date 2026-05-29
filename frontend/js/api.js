@@ -93,6 +93,33 @@ const api = {
         return res.json();
     },
 
+    // Characters
+    async getCharacters(novelId) {
+        const res = await fetch(`${BASE}/novels/${novelId}/characters`);
+        return res.json();
+    },
+    async getCharacter(novelId, charId) {
+        const res = await fetch(`${BASE}/novels/${novelId}/characters/${charId}`);
+        return res.json();
+    },
+    async createCharacter(novelId, data) {
+        const res = await fetch(`${BASE}/novels/${novelId}/characters`, {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(data),
+        });
+        return res.json();
+    },
+    async updateCharacter(novelId, charId, data) {
+        const res = await fetch(`${BASE}/novels/${novelId}/characters/${charId}`, {
+            method: 'PUT', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(data),
+        });
+        return res.json();
+    },
+    async deleteCharacter(novelId, charId) {
+        await fetch(`${BASE}/novels/${novelId}/characters/${charId}`, { method: 'DELETE' });
+    },
+
     // Storyboards
     async getStoryboards(novelId, chapterId) {
         const res = await fetch(`${BASE}/novels/${novelId}/chapters/${chapterId}/storyboards`);
