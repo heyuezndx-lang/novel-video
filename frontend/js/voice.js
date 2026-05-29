@@ -1,70 +1,96 @@
-// ===== Xunfei Voice via Backend =====
+// ===== Voice Features =====
 
 let mediaRecorder = null;
 let audioChunks = [];
 let isRecording = false;
 
-const ACCENTS = [
-    { code: 'mandarin', name: '普通话' },
-    { code: 'cantonese', name: '粤语' },
-    { code: 'henanese', name: '河南话' },
-    { code: 'sichuanese', name: '四川话' },
-];
+// ===== Method 1: Browser Speech Recognition (free, local) =====
 
-async function startRecording() {
+let recog = null;
+let recogActive = false;
+
+function initBrowserRecog() {
+    const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+    if (!SR) return null;
+    const r = new SR();
+    r.lang = 'zh-CN';
+    r.continuous = true;
+    r.interimResults = true;
+    r.onresult = (e) => {
+        let final = '', interim = '';
+        for (let i = e.resultIndex; i < e.results.length; i++) {
+            if (e.results[i].isFinal) final += e.results[i][0].transcript;
+            else interim += e.results[i][0].transcript;
+        }
+        dom.chatInput.value = final + interim;
+    };
+    r.onerror = (e) => {
+        if (e.error === 'no-speech' || e.error === 'aborted') return;
+        stopBrowserRecog();
+        // Fall back to Xunfei recording
+        startXunfeiRecording();
+    };
+    r.onend = () => { if (recogActive) try { r.start(); } catch(ex) { stopBrowserRecog(); } };
+    return r;
+}
+
+function startBrowserRecog() {
+    if (!recog) recog = initBrowserRecog();
+    if (!recog) { startXunfeiRecording(); return; }
+    try {
+        recogActive = true;
+        recog.start();
+        $('#btn-mic').textContent = '🎤';
+        $('#btn-mic').classList.add('recording');
+        dom.chatInput.placeholder = '正在聆听...(浏览器识别)';
+    } catch(e) {
+        recogActive = false;
+        startXunfeiRecording();
+    }
+}
+
+function stopBrowserRecog() {
+    recogActive = false;
+    try { recog.stop(); } catch(e) {}
+    $('#btn-mic').textContent = '🎤';
+    $('#btn-mic').classList.remove('recording');
+}
+
+// ===== Method 2: Xunfei Recording (fallback, via backend) =====
+
+async function startXunfeiRecording() {
     if (isRecording) return;
     try {
         const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-        // Try to record in WAV/PCM format for best quality
         const mimeType = MediaRecorder.isTypeSupported('audio/webm;codecs=opus')
-            ? 'audio/webm;codecs=opus'
-            : MediaRecorder.isTypeSupported('audio/webm')
-                ? 'audio/webm'
-                : 'audio/mp4';
-
+            ? 'audio/webm;codecs=opus' : 'audio/webm';
         mediaRecorder = new MediaRecorder(stream, { mimeType });
         audioChunks = [];
-
-        mediaRecorder.ondataavailable = (e) => {
-            if (e.data.size > 0) audioChunks.push(e.data);
-        };
-
+        mediaRecorder.ondataavailable = (e) => { if (e.data.size > 0) audioChunks.push(e.data); };
         mediaRecorder.onstop = async () => {
             stream.getTracks().forEach(t => t.stop());
             if (audioChunks.length === 0) return;
             const blob = new Blob(audioChunks, { type: mimeType });
-            await sendToRecognize(blob);
+            await sendToXunfei(blob);
         };
-
         mediaRecorder.start();
         isRecording = true;
         $('#btn-mic').textContent = '⏹';
         $('#btn-mic').classList.add('recording');
         dom.chatInput.placeholder = '正在录音...点击停止...';
-    } catch (e) {
-        alert('无法访问麦克风：' + e.message);
-        isRecording = false;
+    } catch(e) {
+        dom.chatInput.placeholder = '无法访问麦克风: ' + e.message;
     }
 }
 
-function stopRecording() {
+function stopXunfeiRecording() {
     if (!isRecording || !mediaRecorder) return;
     isRecording = false;
     mediaRecorder.stop();
-    $('#btn-mic').textContent = '🎤';
-    $('#btn-mic').classList.remove('recording');
     dom.chatInput.placeholder = '识别中...';
 }
 
-function toggleRecording() {
-    if (isRecording) {
-        stopRecording();
-    } else {
-        startRecording();
-    }
-}
-
-async function sendToRecognize(blob) {
+async function sendToXunfei(blob) {
     try {
         const buffer = await blob.arrayBuffer();
         const res = await fetch('/api/voice/recognize', {
@@ -76,49 +102,48 @@ async function sendToRecognize(blob) {
         if (data.text) {
             dom.chatInput.value = data.text;
             dom.chatInput.placeholder = '识别成功！';
-        } else if (data.detail) {
-            dom.chatInput.placeholder = '识别失败: ' + data.detail.substring(0, 40);
         } else {
-            dom.chatInput.placeholder = '未识别到语音内容，请重试';
+            dom.chatInput.placeholder = data.detail ? '错误: ' + data.detail.substring(0, 30) : '未识别到语音';
         }
-    } catch (e) {
-        dom.chatInput.placeholder = '识别失败: ' + (e.message || '未知错误').substring(0, 40);
+    } catch(e) {
+        dom.chatInput.placeholder = '识别失败: ' + (e.message || '').substring(0, 30);
     }
 }
 
-// ===== Voice Output (Browser TTS - free, no API needed) =====
+// ===== Unified toggle =====
+
+function toggleRecording() {
+    if (isRecording) {
+        stopXunfeiRecording();
+    } else if (recogActive) {
+        stopBrowserRecog();
+    } else {
+        // Try browser recognition first
+        startBrowserRecog();
+    }
+}
+
+// ===== TTS (Browser built-in) =====
 
 function speakText(text, btnEl) {
     const synth = window.speechSynthesis;
     if (!synth) return;
+    if (synth.speaking) { synth.cancel(); if (btnEl) btnEl.textContent = '🔊'; return; }
 
-    if (synth.speaking) {
-        synth.cancel();
-        if (btnEl) btnEl.textContent = '🔊';
-        return;
-    }
+    const clean = text.replace(/\*\*(.+?)\*\*/g, '$1').replace(/\n/g, '，').substring(0, 500);
+    const u = new SpeechSynthesisUtterance(clean);
+    u.lang = 'zh-CN'; u.rate = 0.9; u.pitch = 1.0;
 
-    const cleanText = text.replace(/\*\*(.+?)\*\*/g, '$1').replace(/\n/g, '，').substring(0, 500);
-    const utterance = new SpeechSynthesisUtterance(cleanText);
-    utterance.lang = 'zh-CN';
-    utterance.rate = 0.9;
-    utterance.pitch = 1.0;
-
-    // Load voices (async on first call)
     let voices = synth.getVoices();
-    if (voices.length === 0) {
-        synth.onvoiceschanged = () => {
-            const v = synth.getVoices().find(x => x.lang.startsWith('zh')) || synth.getVoices()[0];
-            if (v) utterance.voice = v;
-            synth.speak(utterance);
-        };
-    } else {
-        const zh = voices.find(v => v.lang.startsWith('zh'));
-        if (zh) utterance.voice = zh;
-        synth.speak(utterance);
-    }
+    const setVoice = () => {
+        const v = synth.getVoices().find(x => x.lang.startsWith('zh')) || synth.getVoices()[0];
+        if (v) u.voice = v;
+        synth.speak(u);
+    };
+    if (voices.length === 0) { synth.onvoiceschanged = setVoice; }
+    else setVoice();
 
     if (btnEl) btnEl.textContent = '🔊';
-    utterance.onend = () => { if (btnEl) btnEl.textContent = '🔊'; };
-    utterance.onerror = () => { if (btnEl) btnEl.textContent = '🔊'; };
+    u.onend = () => { if (btnEl) btnEl.textContent = '🔊'; };
+    u.onerror = () => { if (btnEl) btnEl.textContent = '🔊'; };
 }
