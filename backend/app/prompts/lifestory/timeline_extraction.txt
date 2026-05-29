@@ -1,0 +1,18 @@
+从以下采访对话中提取可纳入人生时间线的事件。只提取有明确或大致时间点的事件。
+
+对话内容：
+{conversation_text}
+
+输出格式（只返回 JSON 数组）：
+[
+  {{
+    "title": "考上县一中",
+    "description": "那年全县只录取了30人，我是村里第一个考上的",
+    "year": 1978,
+    "category": "education",
+    "importance": 4,
+    "emotional_tone": "proud"
+  }}
+]
+
+如果没有可提取的事件，返回：[]

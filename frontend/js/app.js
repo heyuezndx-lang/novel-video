@@ -1,532 +1,405 @@
-// ===== App State =====
+const TOPICS = [
+    { key: 'childhood', name: '童年时光', desc: '出生的地方、最早的记忆', icon: '🎈' },
+    { key: 'family', name: '家庭岁月', desc: '父母、兄弟姐妹、家族故事', icon: '🏠' },
+    { key: 'education', name: '求学之路', desc: '上学、老师、校园趣事', icon: '📚' },
+    { key: 'career', name: '事业征程', desc: '工作、成就与转折', icon: '💼' },
+    { key: 'love', name: '爱情故事', desc: '初恋、婚姻、共度的时光', icon: '💕' },
+    { key: 'parenting', name: '为人父母', desc: '孩子、养育的点滴', icon: '👶' },
+    { key: 'travel', name: '旅途见闻', desc: '去过的地方、旅途故事', icon: '✈️' },
+    { key: 'life_wisdom', name: '人生感悟', desc: '最大的收获、想说的话', icon: '💡' },
+];
+
 const state = {
-    novels: [],
-    currentNovelId: null,
-    currentNovel: null,
-    chapters: [],
-    characters: [],
-    currentChapterId: null,
-    currentChapter: null,
-    viewMode: 'write', // write | preview | storyboard | characters
-    sidebarCollapsed: false,
-    saveTimer: null,
-    aiAction: null,
-    aiStreamText: '',
+    stories: [],
+    currentStoryId: null,
+    currentStory: null,
+    currentSessionId: null,
+    chatMessages: [],
+    currentView: 'chat',
+    fontSize: 0,
 };
 
-// ===== DOM refs =====
 const $ = (sel) => document.querySelector(sel);
 const $$ = (sel) => document.querySelectorAll(sel);
 
 const dom = {
-    novelList: $('#novel-list'),
-    chapterList: $('#chapter-list'),
-    chapterSection: $('#chapter-section'),
+    storyList: $('#story-list'),
+    topicSection: $('#topic-section'),
+    topicList: $('#topic-list'),
+    sessionSection: $('#session-section'),
+    progressInfo: $('#progress-info'),
     emptyState: $('#empty-state'),
-    editorContainer: $('#editor-container'),
-    storyboardContainer: $('#storyboard-container'),
-    editorTextarea: $('#editor-textarea'),
-    chapterTitle: $('#chapter-title'),
-    chapterStatus: $('#chapter-status'),
-    wordCount: $('#word-count'),
-    previewPane: $('#preview-pane'),
-    autoSaveStatus: $('#auto-save-status'),
-    topbarNovelInfo: $('#topbar-novel-info'),
+    mainArea: $('#main-area'),
+    chatContainer: $('#chat-container'),
+    chatMessages: $('#chat-messages'),
+    chatInput: $('#chat-input'),
+    timelineContainer: $('#timeline-container'),
+    timelineTrack: $('#timeline-track'),
+    chaptersContainer: $('#chapters-container'),
+    chaptersList: $('#chapters-list'),
+    personsContainer: $('#persons-container'),
+    personGrid: $('#person-grid'),
+    bottomNav: $('#bottom-nav'),
+    topbarStoryInfo: $('#topbar-story-info'),
     modalOverlay: $('#modal-overlay'),
     modal: $('#modal'),
-    aiOutput: $('#ai-output'),
-    aiOutputActions: $('#ai-output-actions'),
-    aiStyleGuide: $('#ai-style-guide'),
-    aiDialogueOptions: $('#ai-dialogue-options'),
-    aiCharName: $('#ai-char-name'),
     sidebar: $('#sidebar'),
-    sbList: $('#sb-list'),
-    sbShotCount: $('#sb-shot-count'),
-    charactersContainer: $('#characters-container'),
-    charGrid: $('#char-grid'),
 };
 
 // ===== Init =====
 document.addEventListener('DOMContentLoaded', async () => {
-    await loadNovels();
+    await loadStories();
     bindEvents();
-    try {
-        await restoreSession();
-    } catch (e) {
-        console.error('恢复会话失败:', e);
-        localStorage.removeItem('nv_last_novel');
-        localStorage.removeItem('nv_last_chapter');
-        localStorage.removeItem('nv_last_view');
-    }
 });
 
 function bindEvents() {
-    // Sidebar toggle
-    $('#btn-toggle-sidebar').onclick = () => {
-        state.sidebarCollapsed = !state.sidebarCollapsed;
-        dom.sidebar.classList.toggle('collapsed', state.sidebarCollapsed);
+    $('#btn-toggle-sidebar').onclick = () => dom.sidebar.classList.toggle('collapsed');
+    $('#btn-new-story').onclick = () => showStoryForm();
+    $('#btn-empty-create').onclick = () => showStoryForm();
+    $('#btn-send').onclick = () => sendChatMessage();
+    $('#btn-font-big').onclick = () => changeFont(+1);
+    $('#btn-font-small').onclick = () => changeFont(-1);
+    $('#btn-export-story').onclick = () => exportStory();
+    $('#btn-generate-chapter').onclick = () => generateChapter();
+    $('#chat-input').onkeydown = (e) => {
+        if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendChatMessage(); }
     };
 
-    // New novel
-    $('#btn-new-novel').onclick = () => showNovelForm();
-    $('#btn-empty-create').onclick = () => showNovelForm();
-
-    // Editor
-    dom.chapterTitle.oninput = () => autoSave();
-    dom.editorTextarea.oninput = () => { updateWordCount(); autoSave(); };
-    dom.chapterStatus.onchange = () => autoSave();
-
-    // View mode
-    $('#btn-view-write').onclick = () => setViewMode('write');
-    $('#btn-view-preview').onclick = () => setViewMode('preview');
-    $('#btn-view-storyboard').onclick = () => setViewMode('storyboard');
-    $('#btn-view-characters').onclick = () => setViewMode('characters');
-
-    // Add character
-    $('#btn-add-character').onclick = () => showCharacterForm();
-
-    // Save snapshot
-    $('#btn-save-snapshot').onclick = () => saveSnapshot();
-
-    // Add chapter
-    $('#btn-add-chapter').onclick = () => promptAddChapter();
-
-    // Export
-    $('#btn-export').onclick = () => {
-        if (!state.currentNovelId) return alert('请先选择一个小说');
-        $('#export-modal').style.display = 'flex';
-    };
-
-    // Export buttons
-    $$('.export-btn').forEach(btn => {
-        btn.onclick = () => {
-            const format = btn.dataset.format;
-            window.open(api.exportUrl(state.currentNovelId, format), '_blank');
-            $('#export-modal').style.display = 'none';
-        };
+    $$('.nav-btn').forEach(btn => {
+        btn.onclick = () => switchView(btn.dataset.view);
     });
 
-    // Close modals on overlay click
-    $('#export-modal').onclick = (e) => {
-        if (e.target === $('#export-modal')) $('#export-modal').style.display = 'none';
-    };
     dom.modalOverlay.onclick = (e) => {
         if (e.target === dom.modalOverlay) dom.modalOverlay.style.display = 'none';
     };
 
-    // AI buttons
-    $$('.ai-btn').forEach(btn => {
-        btn.onclick = () => {
-            const action = btn.dataset.action;
-            if (action === 'dialogue') {
-                dom.aiDialogueOptions.style.display = 'block';
-                populateCharSelect();
-            } else {
-                dom.aiDialogueOptions.style.display = 'none';
-            }
-            triggerAI(action);
-        };
-    });
-
-    // AI output actions
-    $('#btn-accept-ai').onclick = () => acceptAI('insert');
-    $('#btn-replace-ai').onclick = () => acceptAI('replace');
-    $('#btn-discard-ai').onclick = () => discardAI();
-
-    // Generate storyboard
-    $('#btn-generate-sb').onclick = () => generateStoryboards();
-
-    // Keyboard shortcuts
-    document.addEventListener('keydown', (e) => {
-        if ((e.ctrlKey || e.metaKey) && e.key === 's') {
-            e.preventDefault();
-            saveNow();
-        }
-    });
+    $('#tl-filter-category').onchange = () => loadTimelineEvents();
 }
 
-// ===== Novel CRUD =====
-async function loadNovels() {
-    state.novels = await api.getNovels();
-    renderNovelList();
+// ===== Stories =====
+async function loadStories() {
+    state.stories = await api.getStories();
+    renderStoryList();
 }
 
-function renderNovelList() {
-    dom.novelList.innerHTML = state.novels.map(n => `
-        <li class="${n.id === state.currentNovelId ? 'active' : ''}"
-            onclick="selectNovel('${n.id}')">
+function renderStoryList() {
+    dom.storyList.innerHTML = state.stories.map(s => `
+        <li class="${s.id === state.currentStoryId ? 'active' : ''}"
+            onclick="selectStory('${s.id}')">
             <div>
-                <div>${escapeHtml(n.title)}</div>
-                <div class="novel-meta">${n.chapter_count}章 · ${n.total_words}字</div>
+                <div>${esc(s.title)}</div>
+                <div class="novel-meta">${s.interviewee_name} · ${s.chapter_count}章 · ${s.session_count}次访谈</div>
             </div>
-            <span class="novel-delete" onclick="event.stopPropagation();deleteNovelConfirm('${n.id}')">&times;</span>
+            <span class="novel-delete" onclick="event.stopPropagation();deleteStory('${s.id}')">&times;</span>
         </li>
     `).join('');
 }
 
-async function selectNovel(id) {
-    state.currentNovelId = id;
-    state.currentNovel = await api.getNovel(id);
-    state.currentChapterId = null;
-    state.currentChapter = null;
-    dom.editorContainer.style.display = 'none';
-    dom.storyboardContainer.style.display = 'none';
+async function selectStory(id) {
+    state.currentStoryId = id;
+    state.currentStory = await api.getStory(id);
+    state.currentSessionId = null;
+    state.chatMessages = [];
     dom.emptyState.style.display = 'none';
-    dom.chapterSection.style.display = 'block';
-    dom.topbarNovelInfo.textContent = `《${state.currentNovel.title}》`;
-    await loadChapters();
-    await loadCharacters();
-    renderNovelList();
-    saveSession();
+    dom.topicSection.style.display = 'block';
+    dom.sessionSection.style.display = 'block';
+    dom.bottomNav.style.display = 'flex';
+    dom.topbarStoryInfo.textContent = `《${state.currentStory.title}》— ${state.currentStory.interviewee_name || '受访人'}`;
+    renderStoryList();
+    renderTopicList();
+    renderProgress();
+    switchView('chat');
 }
 
-function showNovelForm(novel = null) {
-    const isNew = !novel;
+async function showStoryForm() {
     dom.modal.innerHTML = `
-        <h3>${isNew ? '新建小说' : '编辑小说'}</h3>
+        <h3>创建人生故事</h3>
         <div class="form-group">
-            <label>书名</label>
-            <input type="text" id="form-title" value="${escapeHtml(novel?.title || '')}" placeholder="输入小说名">
+            <label>故事名称</label>
+            <input type="text" id="form-title" placeholder="如：我父亲的人生故事">
         </div>
         <div class="form-group">
-            <label>类型</label>
-            <select id="form-genre">
-                <option value="">选择类型</option>
-                <option value="玄幻" ${novel?.genre === '玄幻' ? 'selected' : ''}>玄幻</option>
-                <option value="都市" ${novel?.genre === '都市' ? 'selected' : ''}>都市</option>
-                <option value="言情" ${novel?.genre === '言情' ? 'selected' : ''}>言情</option>
-                <option value="悬疑" ${novel?.genre === '悬疑' ? 'selected' : ''}>悬疑</option>
-                <option value="科幻" ${novel?.genre === '科幻' ? 'selected' : ''}>科幻</option>
-                <option value="历史" ${novel?.genre === '历史' ? 'selected' : ''}>历史</option>
-                <option value="武侠" ${novel?.genre === '武侠' ? 'selected' : ''}>武侠</option>
-            </select>
+            <label>受访人姓名</label>
+            <input type="text" id="form-name" placeholder="您的名字">
         </div>
         <div class="form-group">
-            <label>简介（可选）</label>
-            <textarea id="form-desc" placeholder="一句话描述你的故事...">${escapeHtml(novel?.description || '')}</textarea>
+            <label>出生年份（可选）</label>
+            <input type="number" id="form-year" placeholder="如：1950" min="1900" max="2026">
+        </div>
+        <div class="form-group">
+            <label>卷首语（可选）</label>
+            <textarea id="form-dedication" placeholder="想写在扉页上的话..."></textarea>
         </div>
         <div class="modal-actions">
             <button class="btn" onclick="document.getElementById('modal-overlay').style.display='none'">取消</button>
-            <button class="btn btn-primary" id="btn-save-novel">${isNew ? '创建' : '保存'}</button>
+            <button class="btn btn-primary" id="btn-save-story">开始我的故事</button>
         </div>
     `;
     dom.modalOverlay.style.display = 'flex';
-    document.getElementById('btn-save-novel').onclick = async () => {
+    document.getElementById('btn-save-story').onclick = async () => {
         const data = {
-            title: $('#form-title').value.trim(),
-            genre: $('#form-genre').value,
-            description: $('#form-desc').value.trim(),
+            title: $('#form-title').value.trim() || '我的人生故事',
+            interviewee_name: $('#form-name').value.trim(),
+            interviewee_birth_year: parseInt($('#form-year').value) || null,
+            dedication: $('#form-dedication').value.trim(),
         };
-        if (!data.title) return alert('请输入书名');
-        if (isNew) {
-            const created = await api.createNovel(data);
-            dom.modalOverlay.style.display = 'none';
-            await loadNovels();
-            selectNovel(created.id);
-        } else {
-            await api.updateNovel(novel.id, data);
-            dom.modalOverlay.style.display = 'none';
-            await loadNovels();
-            selectNovel(novel.id);
-        }
+        const created = await api.createStory(data);
+        dom.modalOverlay.style.display = 'none';
+        await loadStories();
+        selectStory(created.id);
     };
 }
 
-async function deleteNovelConfirm(id) {
-    if (!confirm('确定要删除这部小说吗？所有章节和角色都会被删除。')) return;
-    await api.deleteNovel(id);
-    if (state.currentNovelId === id) {
-        state.currentNovelId = null;
-        state.currentNovel = null;
-        state.currentChapterId = null;
-        state.chapters = [];
-        dom.editorContainer.style.display = 'none';
-        dom.storyboardContainer.style.display = 'none';
-        dom.emptyState.style.display = 'flex';
-        dom.chapterSection.style.display = 'none';
-        dom.topbarNovelInfo.textContent = '';
+async function deleteStory(id) {
+    if (!confirm('确定删除这个故事吗？')) return;
+    await api.deleteStory(id);
+    if (state.currentStoryId === id) {
+        state.currentStoryId = null;
+        resetMain();
     }
-    await loadNovels();
+    await loadStories();
 }
 
-// ===== Chapter CRUD =====
-async function loadChapters() {
-    if (!state.currentNovelId) return;
-    state.chapters = await api.getChapters(state.currentNovelId);
-    renderChapterList();
+function resetMain() {
+    state.currentStoryId = null;
+    state.currentSessionId = null;
+    state.chatMessages = [];
+    dom.emptyState.style.display = 'flex';
+    dom.chatContainer.style.display = 'none';
+    dom.timelineContainer.style.display = 'none';
+    dom.chaptersContainer.style.display = 'none';
+    dom.personsContainer.style.display = 'none';
+    dom.bottomNav.style.display = 'none';
+    dom.topicSection.style.display = 'none';
+    dom.sessionSection.style.display = 'none';
+    dom.topbarStoryInfo.textContent = '';
 }
 
-function flattenChapters(chapters, depth = 0) {
-    let flat = [];
-    for (const ch of chapters) {
-        flat.push({ ...ch, _depth: depth });
-        if (ch.children && ch.children.length > 0) {
-            flat = flat.concat(flattenChapters(ch.children, depth + 1));
-        }
-    }
-    return flat;
-}
-
-function renderChapterList() {
-    const flat = flattenChapters(state.chapters);
-    dom.chapterList.innerHTML = flat.map(ch => `
-        <li class="${ch.id === state.currentChapterId ? 'active' : ''}"
-            onclick="selectChapter('${ch.id}')" style="padding-left:${12 + ch._depth * 16}px">
-            <span>
-                <span class="chapter-status-dot status-${ch.status}"></span>
-                ${escapeHtml(ch.title)}
-            </span>
-            <span class="novel-meta">${ch.word_count}字</span>
-        </li>
+// ===== Topics & Progress =====
+function renderTopicList() {
+    const covered = state.currentStory?.interview_topics_covered || [];
+    dom.topicList.innerHTML = TOPICS.map(t => `
+        <div class="topic-item ${covered.includes(t.key) ? 'done' : ''}"
+             onclick="startInterview('${t.key}')">
+            <span class="topic-check">${covered.includes(t.key) ? '✅' : t.icon}</span>
+            <div>
+                <div style="font-weight:500">${t.name}</div>
+                <div style="font-size:11px;color:var(--text-muted)">${t.desc}</div>
+            </div>
+        </div>
     `).join('');
 }
 
-async function selectChapter(id) {
-    if (!state.currentNovelId) return;
-    // Save current chapter before switching
-    if (state.currentChapterId && state.currentChapterId !== id) {
-        await saveNow();
-    }
-    state.currentChapterId = id;
-    state.currentChapter = await api.getChapter(state.currentNovelId, id);
-    dom.emptyState.style.display = 'none';
-    dom.editorContainer.style.display = 'flex';
-    dom.storyboardContainer.style.display = 'none';
-    dom.chapterTitle.value = state.currentChapter.title;
-    dom.editorTextarea.value = state.currentChapter.content || '';
-    dom.chapterStatus.value = state.currentChapter.status;
-    updateWordCount();
-    renderChapterList();
-    renderPreview();
-    setViewMode('write');
-    saveSession();
+function renderProgress() {
+    const covered = state.currentStory?.interview_topics_covered || [];
+    const total = TOPICS.length;
+    const done = covered.length;
+    dom.progressInfo.innerHTML = `
+        已完成 ${done}/${total} 个话题<br>
+        访谈次数：${state.currentStory?.current_session || 0}<br>
+        状态：${getStatusText(state.currentStory?.status || 'draft')}
+    `;
 }
 
-async function promptAddChapter() {
-    if (!state.currentNovelId) return;
-    const title = prompt('输入章节名：');
-    if (!title) return;
-    const ch = await api.createChapter(state.currentNovelId, { title });
-    await loadChapters();
-    selectChapter(ch.id);
+function getStatusText(s) {
+    return { draft: '草稿', interviewing: '采访中', composing: '整理中', complete: '已完成' }[s] || s;
 }
 
-// ===== Auto-save =====
-function autoSave() {
-    dom.autoSaveStatus.textContent = '未保存';
-    dom.autoSaveStatus.style.color = '#f59e0b';
-    clearTimeout(state.saveTimer);
-    state.saveTimer = setTimeout(() => saveNow(), 2000);
-}
+async function startInterview(topic) {
+    if (!state.currentStoryId) return;
+    await switchView('chat');
+    addChatMessage('system', `让我们聊聊<b>${TOPICS.find(t=>t.key===topic)?.name||topic}</b>这个话题吧。`);
 
-async function saveNow() {
-    if (!state.currentNovelId || !state.currentChapterId) return null;
-    const data = {
-        title: dom.chapterTitle.value.trim(),
-        content: dom.editorTextarea.value,
-        status: dom.chapterStatus.value,
-    };
     try {
-        const updated = await api.updateChapter(state.currentNovelId, state.currentChapterId, data);
-        dom.autoSaveStatus.textContent = '已保存';
-        dom.autoSaveStatus.style.color = '#22c55e';
-        state.currentChapter = updated;
-        updateWordCount();
-        return updated;
+        const result = await api.startSession(state.currentStoryId, topic);
+        state.currentSessionId = result.session.id;
+        addChatMessage('ai', result.first_message.content, result.first_message.emotion);
+        renderTopicList();
+        renderProgress();
+        await loadStories();
     } catch (e) {
-        dom.autoSaveStatus.textContent = '保存失败';
-        dom.autoSaveStatus.style.color = '#ef4444';
-        return null;
+        addChatMessage('system', `出错了：${e.message}，请重试`);
     }
 }
 
-function updateWordCount() {
-    const text = dom.editorTextarea.value;
-    const count = text.replace(/\s/g, '').length;
-    dom.wordCount.textContent = count + ' 字';
+// ===== Chat =====
+async function sendChatMessage() {
+    const input = dom.chatInput;
+    const content = input.value.trim();
+    if (!content || !state.currentSessionId) return;
+
+    input.value = '';
+    addChatMessage('user', content);
+
+    const typingId = showTyping();
+    try {
+        const result = await api.sendMessage(state.currentStoryId, state.currentSessionId, content);
+        hideTyping(typingId);
+        addChatMessage('ai', result.content, result.emotion);
+        renderTopicList();
+        renderProgress();
+    } catch (e) {
+        hideTyping(typingId);
+        addChatMessage('system', `小忆没听清：${e.message}。再试一次好吗？`);
+    }
 }
 
-function setViewMode(mode) {
-    state.viewMode = mode;
-    const isWrite = mode === 'write';
-    const isPreview = mode === 'preview';
-    const isStoryboard = mode === 'storyboard';
-    const isCharacters = mode === 'characters';
-
-    dom.editorTextarea.style.display = isWrite ? 'block' : 'none';
-    dom.previewPane.classList.toggle('active', isPreview);
-    dom.storyboardContainer.style.display = isStoryboard ? 'flex' : 'none';
-    dom.charactersContainer.style.display = isCharacters ? 'flex' : 'none';
-    dom.editorContainer.style.display = (isStoryboard || isCharacters) ? 'none' : 'flex';
-
-    $$('#editor-footer .btn').forEach(b => b.classList.remove('active'));
-    if (isWrite) $('#btn-view-write').classList.add('active');
-    if (isPreview) $('#btn-view-preview').classList.add('active');
-    if (isStoryboard) $('#btn-view-storyboard').classList.add('active');
-    if (isCharacters) $('#btn-view-characters').classList.add('active');
-
-    if (isPreview) renderPreview();
-    if (isStoryboard) loadStoryboards();
-    if (isCharacters) loadCharacters();
+function addChatMessage(role, content, emotion = '') {
+    const msg = { role, content, emotion };
+    state.chatMessages.push(msg);
+    renderChatMessages();
 }
 
-function renderPreview() {
-    const text = dom.editorTextarea.value;
-    const html = simpleMarkdown(text);
-    dom.previewPane.innerHTML = html;
+function renderChatMessages() {
+    const msgs = state.chatMessages;
+    let html = '';
+    for (const m of msgs) {
+        if (m.role === 'system') {
+            html += `<div style="text-align:center;color:var(--text-muted);font-size:14px;padding:8px">${m.content}</div>`;
+        } else if (m.role === 'ai') {
+            html += `<div class="chat-message ai">
+                <div class="chat-avatar ai-avatar">📝</div>
+                <div class="chat-bubble">${simpleMd(m.content)}</div>
+            </div>`;
+        } else {
+            html += `<div class="chat-message user">
+                <div class="chat-avatar user-avatar">😊</div>
+                <div class="chat-bubble">${esc(m.content)}</div>
+            </div>`;
+        }
+    }
+    dom.chatMessages.innerHTML = html;
+    dom.chatMessages.scrollTop = dom.chatMessages.scrollHeight;
 }
 
-function simpleMarkdown(text) {
-    let html = escapeHtml(text);
-    html = html.replace(/^### (.+)$/gm, '<h3>$1</h3>');
-    html = html.replace(/^## (.+)$/gm, '<h2>$1</h2>');
-    html = html.replace(/^# (.+)$/gm, '<h1>$1</h1>');
-    html = html.replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>');
-    html = html.replace(/\*(.+?)\*/g, '<em>$1</em>');
-    html = html.replace(/\n\n/g, '</p><p>');
-    html = '<p>' + html + '</p>';
-    html = html.replace(/<p><\/p>/g, '');
-    return html;
+function showTyping() {
+    const id = 'typing-' + Date.now();
+    dom.chatMessages.insertAdjacentHTML('beforeend', `
+        <div class="chat-message ai" id="${id}">
+            <div class="chat-avatar ai-avatar">📝</div>
+            <div class="chat-bubble"><div class="chat-typing"><span class="dot"></span><span class="dot"></span><span class="dot"></span></div></div>
+        </div>
+    `);
+    dom.chatMessages.scrollTop = dom.chatMessages.scrollHeight;
+    return id;
 }
 
-function escapeHtml(text) {
+function hideTyping(id) {
+    const el = document.getElementById(id);
+    if (el) el.remove();
+}
+
+// ===== Views =====
+async function switchView(view) {
+    state.currentView = view;
+    dom.chatContainer.style.display = view === 'chat' ? 'flex' : 'none';
+    dom.timelineContainer.style.display = view === 'timeline' ? 'flex' : 'none';
+    dom.chaptersContainer.style.display = view === 'chapters' ? 'flex' : 'none';
+    dom.personsContainer.style.display = view === 'persons' ? 'flex' : 'none';
+
+    $$('.nav-btn').forEach(b => b.classList.toggle('active', b.dataset.view === view));
+
+    if (view === 'timeline') await loadTimelineEvents();
+    if (view === 'chapters') await loadChapters();
+    if (view === 'persons') await loadPersons();
+}
+
+async function loadTimelineEvents() {
+    if (!state.currentStoryId) return;
+    const events = await api.getEvents(state.currentStoryId);
+    const catFilter = $('#tl-filter-category')?.value || '';
+    const filtered = catFilter ? events.filter(e => e.category === catFilter) : events;
+
+    const cats = { childhood: '🎈', family: '🏠', education: '📚', career: '💼', love: '💕', parenting: '👶', travel: '✈️', life_wisdom: '💡', other: '📌' };
+
+    dom.timelineTrack.innerHTML = filtered.length === 0
+        ? '<div style="text-align:center;color:var(--text-muted);padding:40px">还没有时间线事件<br>开始采访后，AI 会自动提取人生事件</div>'
+        : filtered.map(e => `
+            <div class="tl-event">
+                <div class="tl-year">${e.event_year || '?'}<br><small style="font-size:12px;font-weight:400">年</small></div>
+                <div class="tl-body">
+                    <div class="tl-title">${esc(e.title)}</div>
+                    <div class="tl-desc">${esc(e.description)}</div>
+                    <div class="tl-meta">
+                        ${e.category ? `<span>${cats[e.category]||''} ${e.category}</span>` : ''}
+                        ${e.emotional_tone ? `<span>${e.emotional_tone}</span>` : ''}
+                        ${e.location ? `<span>📍${esc(e.location)}</span>` : ''}
+                    </div>
+                </div>
+            </div>
+        `).join('');
+}
+
+async function loadChapters() {
+    if (!state.currentStoryId) return;
+    let chapters = await api.getChapters(state.currentStoryId);
+    if (!Array.isArray(chapters)) chapters = [];
+
+    dom.chaptersList.innerHTML = chapters.length === 0
+        ? '<div style="text-align:center;color:var(--text-muted);padding:40px">还没有章节<br>完成采访后点击「AI 生成章节」</div>'
+        : chapters.map(c => `
+            <div class="chapter-card">
+                <h4>${esc(c.title)}</h4>
+                <div class="chapter-content">${simpleMd(c.content || '').substring(0, 500)}${(c.content||'').length > 500 ? '...' : ''}</div>
+                <div style="margin-top:8px;font-size:12px;color:var(--text-muted)">${c.word_count}字</div>
+            </div>
+        `).join('');
+}
+
+async function loadPersons() {
+    if (!state.currentStoryId) return;
+    const persons = await api.getPersons(state.currentStoryId);
+    dom.personGrid.innerHTML = persons.length === 0
+        ? '<div style="text-align:center;color:var(--text-muted);padding:40px">还没有人物<br>采访过程中 AI 会自动识别人物</div>'
+        : persons.map(p => `
+            <div class="person-card">
+                <h4>${esc(p.name)}</h4>
+                <div class="person-rel">${esc(p.relationship) || '相关人物'}</div>
+                ${p.description ? `<p style="font-size:14px;color:var(--text-muted)">${esc(p.description)}</p>` : ''}
+            </div>
+        `).join('');
+}
+
+async function generateChapter() {
+    if (!state.currentStoryId) return;
+    $('#btn-generate-chapter').disabled = true;
+    $('#btn-generate-chapter').textContent = '生成中...';
+    try {
+        const ch = await api.generateChapter(state.currentStoryId);
+        alert(`章节「${ch.title}」已生成！(${ch.word_count}字)`);
+        await loadChapters();
+    } catch (e) {
+        alert('生成失败：' + e.message);
+    } finally {
+        $('#btn-generate-chapter').disabled = false;
+        $('#btn-generate-chapter').textContent = 'AI 生成章节';
+    }
+}
+
+function exportStory() {
+    if (!state.currentStoryId) return;
+    window.open(api.exportStoryUrl(state.currentStoryId, 'markdown'), '_blank');
+}
+
+// ===== Font Size =====
+function changeFont(delta) {
+    state.fontSize = Math.max(-2, Math.min(2, state.fontSize + delta));
+    document.body.classList.remove('font-large', 'font-xlarge');
+    if (state.fontSize === 1) document.body.classList.add('font-large');
+    if (state.fontSize === 2) document.body.classList.add('font-xlarge');
+}
+
+// ===== Utilities =====
+function esc(text) {
     const div = document.createElement('div');
-    div.textContent = text;
+    div.textContent = text || '';
     return div.innerHTML;
 }
 
-// ===== Version History =====
-async function saveSnapshot() {
-    if (!state.currentNovelId || !state.currentChapterId) return;
-    const message = prompt('快照备注（可选）：') || '';
-    await saveNow();
-    await fetch(`${BASE}/novels/${state.currentNovelId}/chapters/${state.currentChapterId}/history`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ message }),
-    });
-    alert('快照已保存');
-}
-
-// ===== AI =====
-function triggerAI(action) {
-    if (!state.currentNovelId || !state.currentChapterId) {
-        alert('请先选择一个章节');
-        return;
-    }
-    state.aiAction = action;
-    state.aiStreamText = '';
-    dom.aiOutput.innerHTML = '<div class="streaming"></div>';
-    dom.aiOutputActions.style.display = 'none';
-    disableAIButtons(true);
-
-    const novelId = state.currentNovelId;
-    const chapterId = state.currentChapterId;
-    const textarea = dom.editorTextarea;
-    const styleGuide = dom.aiStyleGuide.value.trim();
-
-    if (action === 'suggest') {
-        api.aiSuggest(novelId, styleGuide).then(res => {
-            dom.aiOutput.innerHTML = `<div>${simpleMarkdown(res.generated_text)}</div>`;
-            enableAIButtons();
-        }).catch(err => {
-            dom.aiOutput.innerHTML = `<div style="color:#ef4444">出错了: ${err.message}</div>`;
-            enableAIButtons();
-        });
-        return;
-    }
-
-    const streamEl = dom.aiOutput.querySelector('.streaming');
-    api.aiStream(action, {
-        novel_id: novelId,
-        chapter_id: chapterId,
-        current_text: textarea.value,
-        selected_text: textarea.value.substring(textarea.selectionStart, textarea.selectionEnd),
-        style_guide: styleGuide,
-        character_name: $('#ai-char-name').value || $('#ai-char-name-custom').value.trim(),
-        length: 'paragraphs',
-    }, (token) => {
-        state.aiStreamText += token;
-        streamEl.textContent = state.aiStreamText;
-        dom.aiOutput.scrollTop = dom.aiOutput.scrollHeight;
-    }, () => {
-        streamEl.classList.remove('streaming');
-        dom.aiOutputActions.style.display = 'flex';
-        enableAIButtons();
-    }).catch(err => {
-        dom.aiOutput.innerHTML = `<div style="color:#ef4444">出错了: ${err.message}</div>`;
-        enableAIButtons();
-    });
-}
-
-function disableAIButtons(disabled) {
-    $$('.ai-btn').forEach(b => b.disabled = disabled);
-}
-
-function enableAIButtons() {
-    $$('.ai-btn').forEach(b => b.disabled = false);
-}
-
-function acceptAI(mode) {
-    const textarea = dom.editorTextarea;
-    if (mode === 'replace') {
-        const start = textarea.selectionStart;
-        const end = textarea.selectionEnd;
-        textarea.value = textarea.value.substring(0, start) + state.aiStreamText + textarea.value.substring(end);
-    } else {
-        textarea.value += '\n\n' + state.aiStreamText;
-    }
-    updateWordCount();
-    autoSave();
-    discardAI();
-}
-
-function discardAI() {
-    state.aiStreamText = '';
-    state.aiAction = null;
-    dom.aiOutput.innerHTML = '<div class="ai-placeholder">点击上方按钮开始使用 AI 辅助写作</div>';
-    dom.aiOutputActions.style.display = 'none';
-}
-
-function populateCharSelect() {
-    const sel = $('#ai-char-name');
-    sel.innerHTML = '<option value="">选择角色或手动输入</option>';
-    (state.characters || []).forEach(c => {
-        sel.innerHTML += `<option value="${escapeHtml(c.name)}">${escapeHtml(c.name)}（${ROLE_LABELS[c.role] || c.role}）</option>`;
-    });
-}
-
-function saveSession() {
-    localStorage.setItem('nv_last_novel', state.currentNovelId || '');
-    localStorage.setItem('nv_last_chapter', state.currentChapterId || '');
-    localStorage.setItem('nv_last_view', state.viewMode);
-}
-
-async function restoreSession() {
-    const novelId = localStorage.getItem('nv_last_novel');
-    if (!novelId) return;
-    const exists = state.novels.find(n => n.id === novelId);
-    if (!exists) return;
-
-    // Temporarily disable save during restore to avoid overwriting
-    const origSave = saveSession;
-    saveSession = () => {};
-
-    await selectNovel(novelId);
-
-    const chapterId = localStorage.getItem('nv_last_chapter');
-    if (chapterId) {
-        const flat = flattenChapters(state.chapters);
-        const chExists = flat.find(fc => fc.id === chapterId);
-        if (chExists) {
-            await selectChapter(chapterId);
-        }
-    }
-
-    const view = localStorage.getItem('nv_last_view');
-    if (view && view !== 'write') {
-        setViewMode(view);
-    }
-
-    saveSession = origSave;
+function simpleMd(text) {
+    let html = esc(text);
+    html = html.replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>');
+    html = html.replace(/\n\n/g, '</p><p>');
+    html = '<p>' + html + '</p>';
+    return html;
 }

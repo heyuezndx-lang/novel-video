@@ -3,139 +3,106 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>小说写作助手 - Novel Video</title>
+    <title>人生故事写作助手</title>
     <link rel="stylesheet" href="css/style.css">
+    <link rel="stylesheet" href="css/interview.css">
 </head>
 <body>
-    <!-- 顶部导航 -->
     <header class="topbar" id="topbar">
         <div class="topbar-left">
-            <button class="btn-icon" id="btn-toggle-sidebar" title="侧边栏">&#9776;</button>
-            <h1 class="app-title">Novel Video</h1>
+            <button class="btn-icon" id="btn-toggle-sidebar">&#9776;</button>
+            <h1 class="app-title">人生故事</h1>
         </div>
-        <div class="topbar-center" id="topbar-novel-info"></div>
+        <div class="topbar-center" id="topbar-story-info"></div>
         <div class="topbar-right">
-            <button class="btn btn-sm" id="btn-export">导出</button>
-            <button class="btn btn-sm btn-primary" id="btn-new-novel">+ 新建小说</button>
+            <button class="btn btn-sm" id="btn-font-big" title="放大字体">A+</button>
+            <button class="btn btn-sm" id="btn-font-small" title="缩小字体">A-</button>
+            <button class="btn btn-sm" id="btn-export-story">导出</button>
+            <button class="btn btn-sm btn-primary" id="btn-new-story">+ 新故事</button>
         </div>
     </header>
 
-    <!-- 主布局 -->
     <div class="main-layout" id="main-layout">
-        <!-- 左侧小说/章节导航 -->
+        <!-- 左侧栏 -->
         <aside class="sidebar" id="sidebar">
             <div class="sidebar-section">
-                <div class="sidebar-header">
-                    <span>我的小说</span>
-                </div>
-                <ul class="novel-list" id="novel-list"></ul>
+                <div class="sidebar-header"><span>我的故事</span></div>
+                <ul class="novel-list" id="story-list"></ul>
             </div>
-            <div class="sidebar-section" id="chapter-section" style="display:none">
-                <div class="sidebar-header">
-                    <span>章节列表</span>
-                    <button class="btn-icon btn-sm" id="btn-add-chapter" title="添加章节">+</button>
-                </div>
-                <ul class="chapter-list" id="chapter-list"></ul>
+            <div class="sidebar-section" id="topic-section" style="display:none">
+                <div class="sidebar-header"><span>人生话题</span></div>
+                <div class="topic-list" id="topic-list"></div>
+            </div>
+            <div class="sidebar-section" id="session-section" style="display:none">
+                <div class="sidebar-header"><span>进度</span></div>
+                <div class="progress-info" id="progress-info"></div>
             </div>
         </aside>
 
-        <!-- 中央编辑区 -->
-        <main class="editor-area" id="editor-area">
+        <!-- 主区域 -->
+        <main class="main-area" id="main-area">
             <!-- 空状态 -->
             <div class="empty-state" id="empty-state">
-                <div class="empty-icon">&#128218;</div>
-                <h2>开始你的创作之旅</h2>
-                <p>点击「新建小说」创建你的第一部作品，AI 将全程辅助你写作</p>
-                <button class="btn btn-primary btn-lg" id="btn-empty-create">+ 新建小说</button>
+                <div class="empty-icon">&#128214;</div>
+                <h2>每个人的人生都值得被写成一本好书</h2>
+                <p>点击「新故事」开始，AI 会像一位温暖的记者一样采访你</p>
+                <button class="btn btn-primary btn-lg" id="btn-empty-create">+ 创建我的人生故事</button>
             </div>
 
-            <!-- 编辑器 -->
-            <div class="editor-container" id="editor-container" style="display:none">
-                <div class="editor-header">
-                    <input type="text" class="chapter-title-input" id="chapter-title"
-                           placeholder="章节标题..." value="">
-                    <span class="word-count" id="word-count">0 字</span>
-                    <select class="chapter-status" id="chapter-status">
-                        <option value="draft">草稿</option>
-                        <option value="revising">修改中</option>
-                        <option value="complete">已完成</option>
-                    </select>
-                    <button class="btn btn-sm" id="btn-save-snapshot">保存快照</button>
-                </div>
-                <div class="editor-body">
-                    <textarea class="editor-textarea" id="editor-textarea"
-                              placeholder="开始写作... 选中文本后可以使用右侧 AI 面板进行润色"></textarea>
-                    <div class="preview-pane" id="preview-pane"></div>
-                </div>
-                <div class="editor-footer">
-                    <button class="btn btn-sm active" id="btn-view-write">写作</button>
-                    <button class="btn btn-sm" id="btn-view-preview">预览</button>
-                    <button class="btn btn-sm" id="btn-view-storyboard">分镜</button>
-                    <button class="btn btn-sm" id="btn-view-characters">角色</button>
-                    <span class="auto-save-status" id="auto-save-status">已保存</span>
+            <!-- 采访聊天界面 -->
+            <div class="chat-container" id="chat-container" style="display:none">
+                <div class="chat-messages" id="chat-messages"></div>
+                <div class="chat-input-bar">
+                    <textarea id="chat-input" placeholder="在这里输入你的回答..." rows="2"></textarea>
+                    <button class="btn btn-primary" id="btn-send" title="发送">&#10148;</button>
                 </div>
             </div>
 
-            <!-- 分镜面板 -->
-            <div class="storyboard-container" id="storyboard-container" style="display:none">
-                <div class="sb-header">
-                    <h3>分镜脚本</h3>
-                    <div class="sb-controls">
-                        <button class="btn btn-sm btn-primary" id="btn-generate-sb">AI 拆分分镜</button>
-                        <select id="sb-shot-count">
-                            <option value="3">3 个镜头</option>
-                            <option value="5" selected>5 个镜头</option>
-                            <option value="8">8 个镜头</option>
-                            <option value="10">10 个镜头</option>
+            <!-- 时间线视图 -->
+            <div class="timeline-container" id="timeline-container" style="display:none">
+                <div class="timeline-header">
+                    <h3>人生时间线</h3>
+                    <div class="tl-filters">
+                        <select id="tl-filter-category">
+                            <option value="">全部</option>
+                            <option value="childhood">童年</option>
+                            <option value="family">家庭</option>
+                            <option value="education">求学</option>
+                            <option value="career">事业</option>
+                            <option value="love">爱情</option>
+                            <option value="parenting">育儿</option>
+                            <option value="travel">旅途</option>
+                            <option value="life_wisdom">感悟</option>
+                            <option value="other">其他</option>
                         </select>
                     </div>
                 </div>
-                <div class="sb-list" id="sb-list"></div>
+                <div class="timeline-track" id="timeline-track"></div>
             </div>
 
-            <!-- 角色管理面板 -->
-            <div class="characters-container" id="characters-container" style="display:none">
-                <div class="char-header">
-                    <h3>角色管理</h3>
-                    <button class="btn btn-sm btn-primary" id="btn-add-character">+ 添加角色</button>
+            <!-- 章节预览 -->
+            <div class="chapters-container" id="chapters-container" style="display:none">
+                <div class="chapters-header">
+                    <h3>成书预览</h3>
+                    <button class="btn btn-sm btn-primary" id="btn-generate-chapter">AI 生成章节</button>
                 </div>
-                <div class="char-grid" id="char-grid"></div>
+                <div class="chapters-list" id="chapters-list"></div>
+            </div>
+
+            <!-- 人物列表 -->
+            <div class="persons-container" id="persons-container" style="display:none">
+                <div class="char-header"><h3>故事中的人物</h3></div>
+                <div class="char-grid" id="person-grid"></div>
             </div>
         </main>
 
-        <!-- 右侧 AI 面板 -->
-        <aside class="ai-panel" id="ai-panel">
-            <div class="ai-panel-header">
-                <h3>AI 写作助手</h3>
-            </div>
-            <div class="ai-actions">
-                <button class="ai-btn" data-action="continue">&#9998; 续写</button>
-                <button class="ai-btn" data-action="polish">&#10003; 润色选中文字</button>
-                <button class="ai-btn" data-action="dialogue">&#128172; 生成对话</button>
-                <button class="ai-btn" data-action="scene">&#127758; 场景描写</button>
-                <button class="ai-btn" data-action="suggest">&#128161; 情节建议</button>
-            </div>
-            <div class="ai-style">
-                <label>风格提示（可选）</label>
-                <input type="text" id="ai-style-guide" placeholder="例如：保持悬疑感、多用短句...">
-            </div>
-            <div class="ai-dialogue-options" id="ai-dialogue-options" style="display:none">
-                <label>角色名称</label>
-                <select id="ai-char-name" style="width:100%;padding:8px;border:1px solid #e2e8f0;border-radius:6px;font-size:13px;font-family:inherit;">
-                    <option value="">选择角色或手动输入</option>
-                </select>
-                <input type="text" id="ai-char-name-custom" placeholder="或手动输入角色名"
-                       style="width:100%;margin-top:4px;padding:8px;border:1px solid #e2e8f0;border-radius:6px;font-size:13px;font-family:inherit;">
-            </div>
-            <div class="ai-output" id="ai-output">
-                <div class="ai-placeholder">点击上方按钮开始使用 AI 辅助写作</div>
-            </div>
-            <div class="ai-output-actions" id="ai-output-actions" style="display:none">
-                <button class="btn btn-sm btn-primary" id="btn-accept-ai">插入到光标位置</button>
-                <button class="btn btn-sm" id="btn-replace-ai">替换选区</button>
-                <button class="btn btn-sm btn-danger" id="btn-discard-ai">丢弃</button>
-            </div>
-        </aside>
+        <!-- 底部导航 -->
+        <nav class="bottom-nav" id="bottom-nav" style="display:none">
+            <button class="nav-btn active" data-view="chat">&#128172; 采访</button>
+            <button class="nav-btn" data-view="timeline">&#128197; 时间线</button>
+            <button class="nav-btn" data-view="chapters">&#128214; 章节</button>
+            <button class="nav-btn" data-view="persons">&#128101; 人物</button>
+        </nav>
     </div>
 
     <!-- 弹窗 -->
@@ -143,21 +110,8 @@
         <div class="modal" id="modal"></div>
     </div>
 
-    <!-- 导出弹窗 -->
-    <div class="modal-overlay" id="export-modal" style="display:none">
-        <div class="modal">
-            <h3>导出小说</h3>
-            <button class="btn btn-lg export-btn" data-format="markdown">导出 Markdown (.md)</button>
-            <button class="btn btn-lg export-btn" data-format="txt">导出纯文本 (.txt)</button>
-            <button class="btn btn-lg" onclick="document.getElementById('export-modal').style.display='none'">取消</button>
-        </div>
-    </div>
-
     <script src="js/api.js"></script>
-    <script src="js/editor.js"></script>
-    <script src="js/storyboard.js"></script>
-    <script src="js/characters.js"></script>
-    <script src="js/video.js"></script>
     <script src="js/app.js"></script>
+    <script src="js/interview.js"></script>
 </body>
 </html>

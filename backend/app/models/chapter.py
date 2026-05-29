@@ -9,7 +9,9 @@ class Chapter(Base):
     __tablename__ = "chapters"
 
     id = Column(String(36), primary_key=True, default=_uuid)
-    novel_id = Column(String(36), ForeignKey("novels.id", ondelete="CASCADE"), nullable=False, index=True)
+    novel_id = Column(String(36), ForeignKey("novels.id", ondelete="CASCADE"), nullable=True, index=True)
+    story_id = Column(String(36), ForeignKey("stories.id", ondelete="CASCADE"), nullable=True, index=True)
+    source_type = Column(String(20), default="auto")
 
     title = Column(String(200), nullable=False)
     sort_order = Column(Integer, nullable=False, default=0)
@@ -23,7 +25,8 @@ class Chapter(Base):
     created_at = Column(DateTime, default=_now)
     updated_at = Column(DateTime, default=_now, onupdate=_now)
 
-    novel = relationship("Novel", back_populates="chapters")
+    novel = relationship("Novel", back_populates="chapters", foreign_keys=[novel_id])
+    story = relationship("Story", back_populates="chapters", foreign_keys=[story_id])
     parent = relationship("Chapter", back_populates="children", remote_side="Chapter.id", foreign_keys=[parent_id])
     children = relationship("Chapter", back_populates="parent", cascade="all, delete-orphan")
     storyboards = relationship("Storyboard", back_populates="chapter", cascade="all, delete-orphan")

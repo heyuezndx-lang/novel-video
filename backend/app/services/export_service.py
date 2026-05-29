@@ -1,5 +1,5 @@
 from sqlalchemy.orm import Session
-from ..models import Novel, Chapter
+from ..models import Novel, Chapter, Story
 
 
 class ExportService:
@@ -55,5 +55,28 @@ class ExportService:
             for scene in scenes:
                 parts.append(f"\n  {scene.title}\n")
                 parts.append(scene.content + "\n")
+
+        return "".join(parts)
+
+    @staticmethod
+    def export_story_markdown(db: Session, story_id: str) -> str:
+        story = db.get(Story, story_id)
+        chapters = db.query(Chapter).filter(
+            Chapter.story_id == story_id, Chapter.parent_id.is_(None)
+        ).order_by(Chapter.sort_order).all()
+
+        parts = [f"# {story.title}\n\n"]
+        if story.interviewee_name:
+            parts.append(f"> 口述：{story.interviewee_name}\n\n")
+        if story.dedication:
+            parts.append(f"> {story.dedication}\n\n")
+        parts.append("---\n\n")
+
+        if not chapters:
+            parts.append("*还没有生成的章节*\n")
+        else:
+            for ch in chapters:
+                parts.append(f"## {ch.title}\n\n")
+                parts.append(ch.content + "\n\n")
 
         return "".join(parts)

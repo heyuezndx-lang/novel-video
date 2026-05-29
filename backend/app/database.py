@@ -25,5 +25,9 @@ def get_db():
 
 
 def init_db():
-    from .models import Novel, Chapter, Character, Storyboard, VideoTask  # noqa: F401
+    from .models import (  # noqa: F401
+        Novel, Chapter, ChapterHistory, Character, Storyboard, VideoTask,
+        Story, InterviewSession, InterviewMessage, TimelineEvent,
+        Person, MemoryFragment, Photo,
+    )
     Base.metadata.create_all(bind=engine)
