@@ -6,6 +6,7 @@ from ..config import settings
 from .ai_providers.base import AIProvider
 from .ai_providers.claude_provider import ClaudeProvider
 from .ai_providers.openai_provider import OpenAIProvider
+from .ai_providers.deepseek_provider import DeepSeekProvider
 
 PROMPT_DIR = Path(__file__).parent.parent / "prompts"
 
@@ -27,6 +28,11 @@ class AIService:
         if settings.ai_default_provider == "openai":
             return OpenAIProvider(
                 api_key=settings.openai_api_key,
+                model=settings.ai_default_model,
+            )
+        elif settings.ai_default_provider == "deepseek":
+            return DeepSeekProvider(
+                api_key=settings.deepseek_api_key,
                 model=settings.ai_default_model,
             )
         return ClaudeProvider(
