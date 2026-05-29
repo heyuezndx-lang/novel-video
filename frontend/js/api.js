@@ -1,4 +1,4 @@
-const BASE = 'http://127.0.0.1:9988/api';
+const BASE = '/api';
 
 const api = {
     // Novels

@@ -1,3 +1,4 @@
+from pathlib import Path
 from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
@@ -5,6 +6,8 @@ from fastapi.staticfiles import StaticFiles
 
 from .config import settings
 from .database import init_db
+
+FRONTEND_DIR = Path(__file__).parent.parent.parent / "frontend"
 
 
 @asynccontextmanager
@@ -22,7 +25,7 @@ app = FastAPI(
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[o.strip() for o in settings.cors_origins.split(",")],
+    allow_origins=["*"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -38,3 +41,6 @@ app.include_router(storyboard.router, prefix="/api")
 app.include_router(video.router, prefix="/api")
 app.include_router(ai.router, prefix="/api")
 app.include_router(export.router, prefix="/api")
+
+# Mount frontend static files
+app.mount("/", StaticFiles(directory=str(FRONTEND_DIR), html=True), name="frontend")
