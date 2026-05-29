@@ -50,7 +50,14 @@ const dom = {
 document.addEventListener('DOMContentLoaded', async () => {
     await loadNovels();
     bindEvents();
-    restoreSession();
+    try {
+        await restoreSession();
+    } catch (e) {
+        console.error('恢复会话失败:', e);
+        localStorage.removeItem('nv_last_novel');
+        localStorage.removeItem('nv_last_chapter');
+        localStorage.removeItem('nv_last_view');
+    }
 });
 
 function bindEvents() {
