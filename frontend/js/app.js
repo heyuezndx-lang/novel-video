@@ -74,6 +74,9 @@ function bindEvents() {
     };
 
     $('#tl-filter-category').onchange = () => loadTimelineEvents();
+
+    // Voice
+    $('#btn-mic').onclick = () => toggleRecording();
 }
 
 // ===== Stories =====
@@ -253,13 +256,17 @@ function addChatMessage(role, content, emotion = '') {
 function renderChatMessages() {
     const msgs = state.chatMessages;
     let html = '';
-    for (const m of msgs) {
+    for (let i = 0; i < msgs.length; i++) {
+        const m = msgs[i];
         if (m.role === 'system') {
             html += `<div style="text-align:center;color:var(--text-muted);font-size:14px;padding:8px">${m.content}</div>`;
         } else if (m.role === 'ai') {
-            html += `<div class="chat-message ai">
+            html += `<div class="chat-message ai" data-msg-idx="${i}">
                 <div class="chat-avatar ai-avatar">📝</div>
-                <div class="chat-bubble">${simpleMd(m.content)}</div>
+                <div class="chat-bubble">
+                    ${simpleMd(m.content)}
+                    <button class="btn-speak" data-idx="${i}" title="朗读">🔊</button>
+                </div>
             </div>`;
         } else {
             html += `<div class="chat-message user">
@@ -270,6 +277,15 @@ function renderChatMessages() {
     }
     dom.chatMessages.innerHTML = html;
     dom.chatMessages.scrollTop = dom.chatMessages.scrollHeight;
+
+    // Bind speak buttons
+    dom.chatMessages.querySelectorAll('.btn-speak').forEach(btn => {
+        btn.onclick = function() {
+            const idx = parseInt(this.dataset.idx);
+            const text = state.chatMessages[idx]?.content || '';
+            speakText(text, this);
+        };
+    });
 }
 
 function showTyping() {
