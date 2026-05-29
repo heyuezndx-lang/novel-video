@@ -63,6 +63,18 @@ async def end_session(story_id: str, session_id: str, db: Session = Depends(get_
         raise HTTPException(400, str(e))
 
 
+@router.get("/chapters")
+def list_chapters(story_id: str, db: Session = Depends(get_db)):
+    from ..models import Chapter
+    chapters = db.query(Chapter).filter(
+        Chapter.story_id == story_id,
+        Chapter.parent_id.is_(None),
+    ).order_by(Chapter.sort_order).all()
+    return [{"id": c.id, "title": c.title, "content": c.content,
+             "word_count": c.word_count, "sort_order": c.sort_order,
+             "status": c.status, "created_at": c.created_at.isoformat()} for c in chapters]
+
+
 @router.post("/chapters/generate")
 async def generate_chapter(story_id: str, db: Session = Depends(get_db)):
     service = InterviewService(db)

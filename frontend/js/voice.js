@@ -28,8 +28,12 @@ function initRecognition() {
     };
 
     rec.onerror = (event) => {
-        if (event.error === 'no-speech') return; // silent, keep listening
-        dom.chatInput.placeholder = '识别出错：' + event.error + '，请重试';
+        if (event.error === 'no-speech') return;
+        if (event.error === 'network') {
+            dom.chatInput.placeholder = '语音服务不可用（国内网络限制），请使用键盘输入';
+        } else {
+            dom.chatInput.placeholder = '识别出错：' + event.error + '，请重试';
+        }
         stopRecording();
     };
 
@@ -43,6 +47,7 @@ function initRecognition() {
 }
 
 function startRecording() {
+    if (isRecording) return; // 防止重复启动
     if (!recognition) {
         recognition = initRecognition();
     }
@@ -64,7 +69,7 @@ function startRecording() {
         isRecording = false;
         $('#btn-mic').textContent = '🎤';
         $('#btn-mic').classList.remove('recording');
-        alert('无法启动麦克风，请检查浏览器是否允许了麦克风权限');
+        dom.chatInput.placeholder = '麦克风启动失败，请检查权限';
     }
 }
 
