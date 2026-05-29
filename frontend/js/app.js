@@ -47,9 +47,10 @@ const dom = {
 };
 
 // ===== Init =====
-document.addEventListener('DOMContentLoaded', () => {
-    loadNovels();
+document.addEventListener('DOMContentLoaded', async () => {
+    await loadNovels();
     bindEvents();
+    restoreSession();
 });
 
 function bindEvents() {
@@ -169,6 +170,7 @@ async function selectNovel(id) {
     await loadChapters();
     await loadCharacters();
     renderNovelList();
+    saveSession();
 }
 
 function showNovelForm(novel = null) {
@@ -290,6 +292,7 @@ async function selectChapter(id) {
     renderChapterList();
     renderPreview();
     setViewMode('write');
+    saveSession();
 }
 
 async function promptAddChapter() {
@@ -484,4 +487,39 @@ function populateCharSelect() {
     (state.characters || []).forEach(c => {
         sel.innerHTML += `<option value="${escapeHtml(c.name)}">${escapeHtml(c.name)}（${ROLE_LABELS[c.role] || c.role}）</option>`;
     });
+}
+
+function saveSession() {
+    localStorage.setItem('nv_last_novel', state.currentNovelId || '');
+    localStorage.setItem('nv_last_chapter', state.currentChapterId || '');
+    localStorage.setItem('nv_last_view', state.viewMode);
+}
+
+async function restoreSession() {
+    const novelId = localStorage.getItem('nv_last_novel');
+    if (!novelId) return;
+    const exists = state.novels.find(n => n.id === novelId);
+    if (!exists) return;
+
+    // Temporarily disable save during restore to avoid overwriting
+    const origSave = saveSession;
+    saveSession = () => {};
+
+    await selectNovel(novelId);
+
+    const chapterId = localStorage.getItem('nv_last_chapter');
+    if (chapterId) {
+        const flat = flattenChapters(state.chapters);
+        const chExists = flat.find(fc => fc.id === chapterId);
+        if (chExists) {
+            await selectChapter(chapterId);
+        }
+    }
+
+    const view = localStorage.getItem('nv_last_view');
+    if (view && view !== 'write') {
+        setViewMode(view);
+    }
+
+    saveSession = origSave;
 }
