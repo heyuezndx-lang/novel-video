@@ -1,84 +1,59 @@
-// ===== Voice Input (Speech Recognition) =====
+// ===== Xunfei Voice via Backend =====
 
-let recognition = null;
+let mediaRecorder = null;
+let audioChunks = [];
 let isRecording = false;
-let finalTranscript = '';
 
-function initRecognition() {
-    const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
-    if (!SpeechRecognition) return null;
+const ACCENTS = [
+    { code: 'mandarin', name: '普通话' },
+    { code: 'cantonese', name: '粤语' },
+    { code: 'henanese', name: '河南话' },
+    { code: 'sichuanese', name: '四川话' },
+];
 
-    const rec = new SpeechRecognition();
-    rec.lang = 'zh-CN';
-    rec.continuous = true;
-    rec.interimResults = true;
-    rec.maxAlternatives = 1;
-
-    rec.onresult = (event) => {
-        let interim = '';
-        for (let i = event.resultIndex; i < event.results.length; i++) {
-            const result = event.results[i];
-            if (result.isFinal) {
-                finalTranscript += result[0].transcript;
-            } else {
-                interim += result[0].transcript;
-            }
-        }
-        dom.chatInput.value = finalTranscript + interim;
-    };
-
-    rec.onerror = (event) => {
-        if (event.error === 'no-speech') return;
-        if (event.error === 'network') {
-            dom.chatInput.placeholder = '语音服务不可用（国内网络限制），请使用键盘输入';
-        } else {
-            dom.chatInput.placeholder = '识别出错：' + event.error + '，请重试';
-        }
-        stopRecording();
-    };
-
-    rec.onend = () => {
-        if (isRecording) {
-            try { rec.start(); } catch(e) { stopRecording(); }
-        }
-    };
-
-    return rec;
-}
-
-function startRecording() {
-    if (isRecording) return; // 防止重复启动
-    if (!recognition) {
-        recognition = initRecognition();
-    }
-    if (!recognition) {
-        alert('语音输入需要 Chrome 浏览器，请用 Chrome 打开此页面');
-        return;
-    }
-
-    finalTranscript = '';
-    dom.chatInput.value = '';
-    isRecording = true;
-    $('#btn-mic').textContent = '🔴';
-    $('#btn-mic').classList.add('recording');
-
+async function startRecording() {
+    if (isRecording) return;
     try {
-        recognition.start();
-        dom.chatInput.placeholder = '正在聆听...请说话...';
-    } catch(e) {
+        const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+        // Try to record in WAV/PCM format for best quality
+        const mimeType = MediaRecorder.isTypeSupported('audio/webm;codecs=opus')
+            ? 'audio/webm;codecs=opus'
+            : MediaRecorder.isTypeSupported('audio/webm')
+                ? 'audio/webm'
+                : 'audio/mp4';
+
+        mediaRecorder = new MediaRecorder(stream, { mimeType });
+        audioChunks = [];
+
+        mediaRecorder.ondataavailable = (e) => {
+            if (e.data.size > 0) audioChunks.push(e.data);
+        };
+
+        mediaRecorder.onstop = async () => {
+            stream.getTracks().forEach(t => t.stop());
+            if (audioChunks.length === 0) return;
+            const blob = new Blob(audioChunks, { type: mimeType });
+            await sendToRecognize(blob);
+        };
+
+        mediaRecorder.start();
+        isRecording = true;
+        $('#btn-mic').textContent = '⏹';
+        $('#btn-mic').classList.add('recording');
+        dom.chatInput.placeholder = '正在录音...点击停止...';
+    } catch (e) {
+        alert('无法访问麦克风：' + e.message);
         isRecording = false;
-        $('#btn-mic').textContent = '🎤';
-        $('#btn-mic').classList.remove('recording');
-        dom.chatInput.placeholder = '麦克风启动失败，请检查权限';
     }
 }
 
 function stopRecording() {
+    if (!isRecording || !mediaRecorder) return;
     isRecording = false;
-    try { recognition.stop(); } catch(e) {}
+    mediaRecorder.stop();
     $('#btn-mic').textContent = '🎤';
     $('#btn-mic').classList.remove('recording');
-    dom.chatInput.placeholder = '在这里输入你的回答...';
+    dom.chatInput.placeholder = '识别中...';
 }
 
 function toggleRecording() {
@@ -89,42 +64,52 @@ function toggleRecording() {
     }
 }
 
-// ===== Voice Output (Text-to-Speech) =====
+async function sendToRecognize(blob) {
+    try {
+        const buffer = await blob.arrayBuffer();
+        const res = await fetch('/api/voice/recognize', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/octet-stream' },
+            body: buffer,
+        });
+        const data = await res.json();
+        if (data.text) {
+            dom.chatInput.value = data.text;
+        }
+        dom.chatInput.placeholder = '在这里输入你的回答...';
+    } catch (e) {
+        dom.chatInput.placeholder = '识别失败，请手动输入';
+        console.error('语音识别错误:', e);
+    }
+}
 
-function speakText(text, btnEl) {
-    const synth = window.speechSynthesis;
-    if (!synth) return;
+// ===== Voice Output (TTS) =====
 
-    if (synth.speaking) {
-        synth.cancel();
+async function speakText(text, btnEl) {
+    // Stop any playing audio
+    const existing = document.getElementById('tts-audio');
+    if (existing) { existing.remove(); if (btnEl) btnEl.textContent = '🔊'; return; }
+
+    if (btnEl) btnEl.textContent = '⏳';
+
+    try {
+        // Strip markdown
+        const cleanText = text.replace(/\*\*(.+?)\*\*/g, '$1').replace(/\n/g, '，').substring(0, 500);
+        const res = await fetch('/api/voice/speak', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ text: cleanText }),
+        });
+        const audioBlob = await res.blob();
+        const url = URL.createObjectURL(audioBlob);
+        const audio = new Audio(url);
+        audio.id = 'tts-audio';
+        audio.onended = () => { audio.remove(); if (btnEl) btnEl.textContent = '🔊'; };
+        audio.onerror = () => { audio.remove(); if (btnEl) btnEl.textContent = '🔊'; };
+        document.body.appendChild(audio);
+        audio.play();
+    } catch (e) {
+        console.error('语音合成错误:', e);
         if (btnEl) btnEl.textContent = '🔊';
-        return;
     }
-
-    const cleanText = text.replace(/\*\*(.+?)\*\*/g, '$1').replace(/\n/g, '，');
-
-    const utterance = new SpeechSynthesisUtterance(cleanText);
-    utterance.lang = 'zh-CN';
-    utterance.rate = 0.9;
-
-    // Load voices (may need delay on first call)
-    let voices = synth.getVoices();
-    if (voices.length === 0) {
-        synth.onvoiceschanged = () => {
-            voices = synth.getVoices();
-            const zh = voices.find(v => v.lang.startsWith('zh'));
-            if (zh) utterance.voice = zh;
-            synth.speak(utterance);
-        };
-        if (btnEl) btnEl.textContent = '⏳';
-    } else {
-        const zh = voices.find(v => v.lang.startsWith('zh'));
-        if (zh) utterance.voice = zh;
-        synth.speak(utterance);
-    }
-
-    if (btnEl && voices.length > 0) btnEl.textContent = '🔊';
-
-    utterance.onend = () => { if (btnEl) btnEl.textContent = '🔊'; };
-    utterance.onerror = () => { if (btnEl) btnEl.textContent = '🔊'; };
 }

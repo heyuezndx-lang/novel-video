@@ -32,13 +32,14 @@ app.add_middleware(
 )
 
 # API routers - 人生故事
-from .routers import stories, interviews, events, persons  # noqa: E402
+from .routers import stories, interviews, events, persons, voice  # noqa: E402
 from .routers import novels, chapters, characters, storyboard, video, ai, export  # noqa: E402
 
 app.include_router(stories.router)
 app.include_router(interviews.router)
 app.include_router(events.router)
 app.include_router(persons.router)
+app.include_router(voice.router)
 
 # Legacy routes (保留兼容)
 app.include_router(novels.router)
