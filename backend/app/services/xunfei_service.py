@@ -49,14 +49,14 @@ class XunfeiService:
 
     @classmethod
     async def recognize(cls, audio_bytes: bytes) -> str:
-        """语音听写"""
+        """语音听写 — 使用原始二进制PCM发送"""
         import httpx
 
         if len(audio_bytes) < 400:
             raise Exception("音频太短，请录制至少1秒")
 
         headers = cls._asr_headers()
-        headers["Content-Type"] = "application/x-www-form-urlencoded; charset=utf-8"
+        headers["Content-Type"] = "application/octet-stream"
 
         async with httpx.AsyncClient(timeout=15) as client:
             resp = await client.post(
@@ -67,7 +67,8 @@ class XunfeiService:
             result = resp.json()
             code = result.get("code", "")
             if code != "0":
-                raise Exception(f"识别失败: {result.get('desc','')} (code={code})")
+                desc = result.get("desc", "")
+                raise Exception(f"讯飞返回: code={code}, desc={desc}")
             return result.get("data", "")
 
     @classmethod

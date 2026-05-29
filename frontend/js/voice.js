@@ -75,11 +75,14 @@ async function sendToRecognize(blob) {
         const data = await res.json();
         if (data.text) {
             dom.chatInput.value = data.text;
+            dom.chatInput.placeholder = '识别成功！';
+        } else if (data.detail) {
+            dom.chatInput.placeholder = '识别失败: ' + data.detail.substring(0, 40);
+        } else {
+            dom.chatInput.placeholder = '未识别到语音内容，请重试';
         }
-        dom.chatInput.placeholder = '在这里输入你的回答...';
     } catch (e) {
-        dom.chatInput.placeholder = '识别失败，请手动输入';
-        console.error('语音识别错误:', e);
+        dom.chatInput.placeholder = '识别失败: ' + (e.message || '未知错误').substring(0, 40);
     }
 }
 

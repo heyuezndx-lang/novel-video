@@ -14,39 +14,54 @@ DATA_DIR = Path(__file__).parent.parent.parent.parent / "data"
 async def recognize(request: Request):
     """语音识别：接收前端录音（webm/opus），转为PCM后发送讯飞ASR"""
     tmp_in = None
+    tmp_pcm = None
     try:
         audio_bytes = await request.body()
         if len(audio_bytes) < 400:
             raise HTTPException(400, "音频太短，请录制至少1秒")
 
-        # Save incoming audio
-        tmp_in = DATA_DIR / "voice_in.webm"
+        # Save for debug
+        tmp_in = DATA_DIR / "debug_voice.webm"
         tmp_in.write_bytes(audio_bytes)
 
-        # Convert webm to PCM using ffmpeg; if it fails, try raw PCM directly
+        # Try ffmpeg conversion to PCM
+        pcm = None
+        convert_ok = False
         try:
-            tmp_out = DATA_DIR / "voice_out.wav"
+            tmp_pcm = DATA_DIR / "debug_voice.pcm"
             subprocess.run([
                 "ffmpeg", "-y", "-i", str(tmp_in),
-                "-ar", "16000", "-ac", "1", "-sample_fmt", "s16",
-                "-f", "wav", str(tmp_out)
-            ], check=True, capture_output=True, timeout=10)
-            pcm = tmp_out.read_bytes()[44:]  # Skip WAV header
-            if tmp_out.exists(): tmp_out.unlink()
-        except (subprocess.CalledProcessError, subprocess.TimeoutExpired):
-            # Not a valid webm — assume it's already raw PCM
-            pcm = audio_bytes
+                "-acodec", "pcm_s16le", "-ar", "16000", "-ac", "1",
+                "-f", "s16le", str(tmp_pcm)
+            ], check=True, capture_output=True, timeout=15)
+            pcm = tmp_pcm.read_bytes()
+            convert_ok = len(pcm) > 400
+        except Exception:
+            pass
 
-        text = await XunfeiService.recognize(pcm)
-        return {"text": text or ""}
+        # Try PCM first, then raw webm as fallback
+        errors = []
+        if convert_ok:
+            try:
+                text = await XunfeiService.recognize(pcm)
+                if text:
+                    return {"text": text}
+            except Exception as e:
+                errors.append(f"PCM: {e}")
+
+        # Fallback: try raw webm directly
+        try:
+            text = await XunfeiService.recognize(audio_bytes)
+            if text:
+                return {"text": text}
+        except Exception as e:
+            errors.append(f"WebM: {e}")
+
+        raise HTTPException(500, "; ".join(errors) if errors else "无法识别语音")
     except HTTPException:
         raise
     except Exception as e:
         raise HTTPException(500, f"语音识别失败: {str(e)}")
-    finally:
-        if tmp_in and tmp_in.exists():
-            try: tmp_in.unlink()
-            except: pass
 
 
 @router.post("/speak")
