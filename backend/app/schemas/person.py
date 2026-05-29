@@ -10,6 +10,7 @@ class PersonCreate(BaseModel):
     first_met_story: str = ""
     importance: int = 3
     tags: list[str] = []
+    photo_url: str = ""
 
 
 class PersonUpdate(BaseModel):
@@ -20,6 +21,7 @@ class PersonUpdate(BaseModel):
     first_met_story: str | None = None
     importance: int | None = None
     tags: list[str] | None = None
+    photo_url: str | None = None
 
 
 class PersonOut(BaseModel):

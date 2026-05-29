@@ -16,6 +16,7 @@ class CharacterCreate(BaseModel):
     arc: str = ""
     tags: list[str] = []
     sort_order: int = 0
+    avatar_url: str = ""
 
 
 class CharacterUpdate(BaseModel):
@@ -33,6 +34,7 @@ class CharacterUpdate(BaseModel):
     tags: list[str] | None = None
     relationships: dict | None = None
     sort_order: int | None = None
+    avatar_url: str | None = None
 
 
 class CharacterOut(BaseModel):

@@ -424,10 +424,23 @@ function showPersonForm() {
     $('#pf-save').onclick = async () => {
         const data = { name: $('#pf-name').value.trim(), role: $('#pf-role').value.trim(), personality: $('#pf-desc').value.trim() };
         if (!data.name) return alert('请输入姓名');
+
+        // Upload image if selected
+        const imgFile = $('#pf-image')?.files?.[0];
+        if (imgFile) {
+            const formData = new FormData();
+            formData.append('file', imgFile);
+            try {
+                const uploadRes = await fetch('/api/upload/image', { method: 'POST', body: formData });
+                const uploadData = await uploadRes.json();
+                if (uploadData.url) data.image_url = uploadData.url;
+            } catch(e) { console.error('上传失败:', e); }
+        }
+
         if (isStory) {
-            await api.createPerson(id, { name: data.name, relationship: data.role, description: data.personality });
+            await api.createPerson(id, { name: data.name, relationship: data.role, description: data.personality, photo_url: data.image_url || '' });
         } else {
-            await api.createCharacter(id, data);
+            await api.createCharacter(id, { ...data, avatar_url: data.image_url || '' });
         }
         $('#modal-overlay').style.display = 'none';
         if (isStory) loadStoryPersons(); else loadNovelCharacters();
