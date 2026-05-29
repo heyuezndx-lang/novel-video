@@ -83,33 +83,39 @@ async function sendToRecognize(blob) {
     }
 }
 
-// ===== Voice Output (TTS) =====
+// ===== Voice Output (Browser TTS - free, no API needed) =====
 
-async function speakText(text, btnEl) {
-    // Stop any playing audio
-    const existing = document.getElementById('tts-audio');
-    if (existing) { existing.remove(); if (btnEl) btnEl.textContent = '🔊'; return; }
+function speakText(text, btnEl) {
+    const synth = window.speechSynthesis;
+    if (!synth) return;
 
-    if (btnEl) btnEl.textContent = '⏳';
-
-    try {
-        // Strip markdown
-        const cleanText = text.replace(/\*\*(.+?)\*\*/g, '$1').replace(/\n/g, '，').substring(0, 500);
-        const res = await fetch('/api/voice/speak', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ text: cleanText }),
-        });
-        const audioBlob = await res.blob();
-        const url = URL.createObjectURL(audioBlob);
-        const audio = new Audio(url);
-        audio.id = 'tts-audio';
-        audio.onended = () => { audio.remove(); if (btnEl) btnEl.textContent = '🔊'; };
-        audio.onerror = () => { audio.remove(); if (btnEl) btnEl.textContent = '🔊'; };
-        document.body.appendChild(audio);
-        audio.play();
-    } catch (e) {
-        console.error('语音合成错误:', e);
+    if (synth.speaking) {
+        synth.cancel();
         if (btnEl) btnEl.textContent = '🔊';
+        return;
     }
+
+    const cleanText = text.replace(/\*\*(.+?)\*\*/g, '$1').replace(/\n/g, '，').substring(0, 500);
+    const utterance = new SpeechSynthesisUtterance(cleanText);
+    utterance.lang = 'zh-CN';
+    utterance.rate = 0.9;
+    utterance.pitch = 1.0;
+
+    // Load voices (async on first call)
+    let voices = synth.getVoices();
+    if (voices.length === 0) {
+        synth.onvoiceschanged = () => {
+            const v = synth.getVoices().find(x => x.lang.startsWith('zh')) || synth.getVoices()[0];
+            if (v) utterance.voice = v;
+            synth.speak(utterance);
+        };
+    } else {
+        const zh = voices.find(v => v.lang.startsWith('zh'));
+        if (zh) utterance.voice = zh;
+        synth.speak(utterance);
+    }
+
+    if (btnEl) btnEl.textContent = '🔊';
+    utterance.onend = () => { if (btnEl) btnEl.textContent = '🔊'; };
+    utterance.onerror = () => { if (btnEl) btnEl.textContent = '🔊'; };
 }
