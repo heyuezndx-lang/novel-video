@@ -26,3 +26,4 @@ Thumbs.db
 node_modules/
 data/*.wav
 data/*.pcm
+data/uploads/
