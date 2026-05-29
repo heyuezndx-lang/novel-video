@@ -1,0 +1,148 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>小说写作助手 - Novel Video</title>
+    <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+    <!-- 顶部导航 -->
+    <header class="topbar" id="topbar">
+        <div class="topbar-left">
+            <button class="btn-icon" id="btn-toggle-sidebar" title="侧边栏">&#9776;</button>
+            <h1 class="app-title">Novel Video</h1>
+        </div>
+        <div class="topbar-center" id="topbar-novel-info"></div>
+        <div class="topbar-right">
+            <button class="btn btn-sm" id="btn-export">导出</button>
+            <button class="btn btn-sm btn-primary" id="btn-new-novel">+ 新建小说</button>
+        </div>
+    </header>
+
+    <!-- 主布局 -->
+    <div class="main-layout" id="main-layout">
+        <!-- 左侧小说/章节导航 -->
+        <aside class="sidebar" id="sidebar">
+            <div class="sidebar-section">
+                <div class="sidebar-header">
+                    <span>我的小说</span>
+                </div>
+                <ul class="novel-list" id="novel-list"></ul>
+            </div>
+            <div class="sidebar-section" id="chapter-section" style="display:none">
+                <div class="sidebar-header">
+                    <span>章节列表</span>
+                    <button class="btn-icon btn-sm" id="btn-add-chapter" title="添加章节">+</button>
+                </div>
+                <ul class="chapter-list" id="chapter-list"></ul>
+            </div>
+        </aside>
+
+        <!-- 中央编辑区 -->
+        <main class="editor-area" id="editor-area">
+            <!-- 空状态 -->
+            <div class="empty-state" id="empty-state">
+                <div class="empty-icon">&#128218;</div>
+                <h2>开始你的创作之旅</h2>
+                <p>点击「新建小说」创建你的第一部作品，AI 将全程辅助你写作</p>
+                <button class="btn btn-primary btn-lg" id="btn-empty-create">+ 新建小说</button>
+            </div>
+
+            <!-- 编辑器 -->
+            <div class="editor-container" id="editor-container" style="display:none">
+                <div class="editor-header">
+                    <input type="text" class="chapter-title-input" id="chapter-title"
+                           placeholder="章节标题..." value="">
+                    <span class="word-count" id="word-count">0 字</span>
+                    <select class="chapter-status" id="chapter-status">
+                        <option value="draft">草稿</option>
+                        <option value="revising">修改中</option>
+                        <option value="complete">已完成</option>
+                    </select>
+                    <button class="btn btn-sm" id="btn-save-snapshot">保存快照</button>
+                </div>
+                <div class="editor-body">
+                    <textarea class="editor-textarea" id="editor-textarea"
+                              placeholder="开始写作... 选中文本后可以使用右侧 AI 面板进行润色"></textarea>
+                    <div class="preview-pane" id="preview-pane"></div>
+                </div>
+                <div class="editor-footer">
+                    <button class="btn btn-sm active" id="btn-view-write">写作</button>
+                    <button class="btn btn-sm" id="btn-view-preview">预览</button>
+                    <button class="btn btn-sm" id="btn-view-storyboard">分镜</button>
+                    <span class="auto-save-status" id="auto-save-status">已保存</span>
+                </div>
+            </div>
+
+            <!-- 分镜面板 -->
+            <div class="storyboard-container" id="storyboard-container" style="display:none">
+                <div class="sb-header">
+                    <h3>分镜脚本</h3>
+                    <div class="sb-controls">
+                        <button class="btn btn-sm btn-primary" id="btn-generate-sb">AI 拆分分镜</button>
+                        <select id="sb-shot-count">
+                            <option value="3">3 个镜头</option>
+                            <option value="5" selected>5 个镜头</option>
+                            <option value="8">8 个镜头</option>
+                            <option value="10">10 个镜头</option>
+                        </select>
+                    </div>
+                </div>
+                <div class="sb-list" id="sb-list"></div>
+            </div>
+        </main>
+
+        <!-- 右侧 AI 面板 -->
+        <aside class="ai-panel" id="ai-panel">
+            <div class="ai-panel-header">
+                <h3>AI 写作助手</h3>
+            </div>
+            <div class="ai-actions">
+                <button class="ai-btn" data-action="continue">&#9998; 续写</button>
+                <button class="ai-btn" data-action="polish">&#10003; 润色选中文字</button>
+                <button class="ai-btn" data-action="dialogue">&#128172; 生成对话</button>
+                <button class="ai-btn" data-action="scene">&#127758; 场景描写</button>
+                <button class="ai-btn" data-action="suggest">&#128161; 情节建议</button>
+            </div>
+            <div class="ai-style">
+                <label>风格提示（可选）</label>
+                <input type="text" id="ai-style-guide" placeholder="例如：保持悬疑感、多用短句...">
+            </div>
+            <div class="ai-dialogue-options" id="ai-dialogue-options" style="display:none">
+                <label>角色名称</label>
+                <input type="text" id="ai-char-name" placeholder="输入角色名">
+            </div>
+            <div class="ai-output" id="ai-output">
+                <div class="ai-placeholder">点击上方按钮开始使用 AI 辅助写作</div>
+            </div>
+            <div class="ai-output-actions" id="ai-output-actions" style="display:none">
+                <button class="btn btn-sm btn-primary" id="btn-accept-ai">插入到光标位置</button>
+                <button class="btn btn-sm" id="btn-replace-ai">替换选区</button>
+                <button class="btn btn-sm btn-danger" id="btn-discard-ai">丢弃</button>
+            </div>
+        </aside>
+    </div>
+
+    <!-- 弹窗 -->
+    <div class="modal-overlay" id="modal-overlay" style="display:none">
+        <div class="modal" id="modal"></div>
+    </div>
+
+    <!-- 导出弹窗 -->
+    <div class="modal-overlay" id="export-modal" style="display:none">
+        <div class="modal">
+            <h3>导出小说</h3>
+            <button class="btn btn-lg export-btn" data-format="markdown">导出 Markdown (.md)</button>
+            <button class="btn btn-lg export-btn" data-format="txt">导出纯文本 (.txt)</button>
+            <button class="btn btn-lg" onclick="document.getElementById('export-modal').style.display='none'">取消</button>
+        </div>
+    </div>
+
+    <script src="js/api.js"></script>
+    <script src="js/editor.js"></script>
+    <script src="js/storyboard.js"></script>
+    <script src="js/video.js"></script>
+    <script src="js/app.js"></script>
+</body>
+</html>
