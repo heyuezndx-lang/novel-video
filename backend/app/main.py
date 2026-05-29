@@ -32,22 +32,21 @@ app.add_middleware(
 )
 
 # API routers - 人生故事
-from .routers import stories, interviews, events, persons, voice  # noqa: E402
+from .routers import stories, interviews, events, persons  # noqa: E402
 from .routers import novels, chapters, characters, storyboard, video, ai, export  # noqa: E402
 
 app.include_router(stories.router)
 app.include_router(interviews.router)
 app.include_router(events.router)
 app.include_router(persons.router)
-app.include_router(voice.router)
 
 # Legacy routes (保留兼容)
-app.include_router(novels.router)
-app.include_router(chapters.router)
-app.include_router(characters.router)
-app.include_router(storyboard.router)
-app.include_router(video.router)
-app.include_router(ai.router)
+app.include_router(novels.router, prefix="/api")
+app.include_router(chapters.router, prefix="/api")
+app.include_router(characters.router, prefix="/api")
+app.include_router(storyboard.router, prefix="/api")
+app.include_router(video.router, prefix="/api")
+app.include_router(ai.router, prefix="/api")
 app.include_router(export.router, prefix="/api")
 
 # Mount frontend static files
